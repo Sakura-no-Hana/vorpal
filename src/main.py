@@ -1,14 +1,18 @@
 import os
 
-import discord
+from discord.ext import commands
+import requests
 
-class Vorpal(discord.Client):
-    async def on_ready(self):
-        print('Logged on as {0}!'.format(self.user))
+client = commands.Bot(command_prefix='!')
 
-    async def on_message(self, message):
-        print('Message from {0.author}: {0.content}'.format(message))
 
-client = Vorpal()
+@client.command()
+async def configure(ctx):
+    attachment_url = ctx.message.attachments[0].url
+    file_request = requests.get(attachment_url)
+    with open(f'../data/{ctx.guild.id}.vorpal', 'w+') as f:
+        f.write(file_request.content.decode("utf-8"))
+
+
 token = os.environ.get('TOKEN')
 client.run(token)
