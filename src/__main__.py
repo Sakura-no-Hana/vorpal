@@ -1,11 +1,10 @@
 import os
 
 from discord.ext import commands
+from utils.embed import RestrictedEmbed
 from yaml import safe_load
 
-from utils.embed import RestrictedEmbed
-
-client = commands.Bot(command_prefix='!')
+client = commands.Bot(command_prefix='|')
 
 events = {'typing', 'message', 'message_delete', 'bulk_message_delete', 'message_edit',
           'reaction_add', 'reaction_remove', 'channel_create', 'channel_delete', 'channel_update',
