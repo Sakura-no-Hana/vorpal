@@ -6,8 +6,8 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-"discord.py" = {extras = ["voice"], version = "*"}
-PyYAML = "*"
+"discord.py" = { extras = ["voice"], version = "*" }
+sly = "*"
 
 [requires]
 python_version = "3.8"
