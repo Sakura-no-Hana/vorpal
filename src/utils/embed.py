@@ -5,11 +5,11 @@ class RestrictedEmbed:
     def __init__(self, ctx):
         self.ctx = ctx
 
-    async def fail(self, description=''):
+    async def fail(self, title: str = 'Operation Failed', description: str = ''):
         if self.ctx.guild:
             if not self.ctx.channel.permissions_for(self.ctx.guild.me).embed_links:
-                return await self.ctx.send(f'**Configuration Failed**\n{description}')
-        embed = discord.Embed(title='Configuration Failed')
+                return await self.ctx.send(f'**{title}**\n{description}')
+        embed = discord.Embed(title=title)
         if self.ctx.guild:
             embed.set_author(name=self.ctx.guild.name, icon_url=self.ctx.guild.icon_url)
             embed.color = self.ctx.guild.me.color
@@ -21,11 +21,11 @@ class RestrictedEmbed:
         embed.description = description
         await self.ctx.send(embed=embed)
 
-    async def unfail(self, description=''):
+    async def unfail(self, title: str = 'Operation Succeeded', description: str = ''):
         if self.ctx.guild:
             if not self.ctx.channel.permissions_for(self.ctx.guild.me).embed_links:
-                return await self.ctx.send(f'**Configuration Passed**\n{description}')
-        embed = discord.Embed(title='Configuration Passed')
+                return await self.ctx.send(f'**{title}**\n{description}')
+        embed = discord.Embed(title=title)
         if self.ctx.guild:
             embed.set_author(name=self.ctx.guild.name, icon_url=self.ctx.guild.icon_url)
             embed.color = self.ctx.guild.me.color

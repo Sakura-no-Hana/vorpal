@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "31041a6553b8784e26be61224fdf38a62984d0dc3e71be14ea6aeb27d4bbfbbb"
+            "sha256": "b511d3a42e6f7890f1c3d4c1b652b7d571e555a72d1a988cddfdef9a04f3cc63"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -109,6 +109,13 @@
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3'",
             "version": "==2.10"
         },
+        "lark-parser": {
+            "hashes": [
+                "sha256:9e7589365d6b6de1cca40b0eaec31104a3fb96a37a11a9dfd5098e95b50aa6cd"
+            ],
+            "index": "pypi",
+            "version": "==0.9.0"
+        },
         "multidict": {
             "hashes": [
                 "sha256:1ece5a3369835c20ed57adadc663400b5525904e53bae59ec854a5d36b39b21a",
@@ -164,6 +171,7 @@
                 "sha256:e2da3c13307eac601f3de04887624939aca8ee3c9488a0bb0eca4fb9401fc6b1",
                 "sha256:f67814c38162f4deb31f68d590771a29d5ae3b1bd64b75cf232308e5c74777e0"
             ],
+            "index": "pypi",
             "version": "==1.3.0"
         },
         "six": {
@@ -173,13 +181,6 @@
             ],
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3'",
             "version": "==1.15.0"
-        },
-        "sly": {
-            "hashes": [
-                "sha256:e5f2266a231322cc17519fbc3a3ba1c6335fed5a9a55abe0e598a35aea0ac32a"
-            ],
-            "index": "pypi",
-            "version": "==0.4"
         },
         "yarl": {
             "hashes": [
