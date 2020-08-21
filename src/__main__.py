@@ -1,5 +1,6 @@
+from pathlib import Path
 import os
-import shutil
+
 
 import discord
 from discord.ext import commands
@@ -41,17 +42,17 @@ async def configure(ctx: commands.Context):
             "See the documentation for more information.",
         )
     if ctx.guild:
-        await ctx.message.attachments[0].save(path := f"../data/g{ctx.guild.id}.vorpal")
+        await ctx.message.attachments[0].save(path := Path(f"../data/u{ctx.author.id}.vorpal"))
         if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
             toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
     else:
-        await ctx.message.attachments[0].save(path := f"../data/u{ctx.author.id}.vorpal")
+        await ctx.message.attachments[0].save(path := Path(f"../data/u{ctx.author.id}.vorpal"))
         if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
             toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
     try:
         test_python_lib(path)
     except lark.exceptions.LarkError:
-        os.remove(path)
+        path.unlink()
         await ctx.message.add_reaction("💢")
         return await RestrictedEmbed(ctx).send(
             "Configuration Failed",
