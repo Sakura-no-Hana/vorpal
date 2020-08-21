@@ -6,10 +6,10 @@ import pymongo
 
 from utils.embed import RestrictedEmbed
 
-client = commands.Bot(command_prefix='|')
-myclient = pymongo.MongoClient("mongodb://localhost:27017/")
-mydb = myclient["vorpal"]
-toggles = mydb["toggles"]
+client = commands.Bot(command_prefix='|', help_command=None)
+myclient = pymongo.MongoClient('mongodb://localhost:27017/')
+mydb = myclient['vorpal']
+toggles = mydb['toggles']
 
 
 @client.event
@@ -76,6 +76,19 @@ async def toggle(ctx: commands.Context):
         await RestrictedEmbed(ctx).send(
             'Toggle Succeeded',
             'The bot will now {}follow custom commands.'.format('' if value['toggle'] else 'not '))
+
+
+@client.command()
+async def help(ctx: commands.Context):
+    await RestrictedEmbed(ctx).send(
+        'Help',
+        '**`|configure [config:file]`**: Configure the bot using the attached file, `config`. '
+        'By default, this is restricted to those with the Manage Guild permission. '
+        'See file syntax in the bot\'s documentation.\n'
+        '**`|toggle`**: Toggle whether the bot uses the config file. '
+        'This is so reckless users have a killswitch.\n'
+        '**`|help`**: Shows this command.'
+    )
 
 
 if __name__ == '__main__':
