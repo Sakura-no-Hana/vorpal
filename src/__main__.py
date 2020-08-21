@@ -20,12 +20,12 @@ async def configure(ctx: commands.Context):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
             await ctx.message.add_reaction('💢')
-            return await RestrictedEmbed(ctx).fail(
+            return await RestrictedEmbed(ctx).send(
                 'Configuration Failed',
                 'Manage Guild permissions are required for configuration.')
     if len(ctx.message.attachments) == 0:
         await ctx.message.add_reaction('💢')
-        return await RestrictedEmbed(ctx).fail(
+        return await RestrictedEmbed(ctx).send(
             'Configuration Failed',
             'Please attach a Vorpal config file in order to configure the bot. '
             'See the documentation for more information.')
@@ -40,7 +40,7 @@ async def configure(ctx: commands.Context):
             toggles.insert_one({'id': f'u{ctx.author.id}', 'toggle': True})
 
     await ctx.message.add_reaction('✅')
-    await RestrictedEmbed(ctx).unfail('Configuration Passed', 'File saved.')
+    await RestrictedEmbed(ctx).send('Configuration Passed', 'File saved.')
 
 
 @client.command()
@@ -48,7 +48,7 @@ async def toggle(ctx: commands.Context):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
             await ctx.message.add_reaction('💢')
-            return await RestrictedEmbed(ctx).fail(
+            return await RestrictedEmbed(ctx).send(
                 'Toggle Failed',
                 'Manage Guild permissions are required to toggle.')
         if (value := toggles.find_one({'id': f'g{ctx.guild.id}'})) is not None:
@@ -58,7 +58,7 @@ async def toggle(ctx: commands.Context):
         else:
             toggles.insert_one((value := {'id': f'g{ctx.guild.id}', 'toggle': False}))
         await ctx.message.add_reaction('✅')
-        await RestrictedEmbed(ctx).unfail(
+        await RestrictedEmbed(ctx).send(
             'Toggle Succeeded',
             'The bot will now {}follow custom commands.'.format(
                 '' if value['toggle'] else 'not '))
@@ -70,7 +70,7 @@ async def toggle(ctx: commands.Context):
         else:
             toggles.insert_one((value := {'id': f'u{ctx.author.id}', 'toggle': False}))
         await ctx.message.add_reaction('✅')
-        await RestrictedEmbed(ctx).unfail(
+        await RestrictedEmbed(ctx).send(
             'Toggle Succeeded',
             'The bot will now {}follow custom commands.'.format(
                 '' if value['toggle'] else 'not '))
