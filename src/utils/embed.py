@@ -19,4 +19,6 @@ class RestrictedEmbed:
         embed.set_footer(text=self.ctx.author.display_name, icon_url=self.ctx.author.avatar_url)
         embed.set_thumbnail(url=self.ctx.bot.user.avatar_url)
         embed.description = description
-        await self.ctx.send(embed=embed)
+        file = discord.File('../res/swordspinr.gif', filename='vorpal.gif')
+        embed.set_thumbnail(url='attachment://vorpal.gif')
+        await self.ctx.send(file=file, embed=embed)

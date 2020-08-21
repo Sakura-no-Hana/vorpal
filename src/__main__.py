@@ -1,7 +1,9 @@
 import os
 
-import pymongo
+import discord
 from discord.ext import commands
+import pymongo
+
 from utils.embed import RestrictedEmbed
 
 client = commands.Bot(command_prefix='|')
@@ -12,6 +14,8 @@ toggles = mydb["toggles"]
 
 @client.event
 async def on_ready():
+    activity = discord.Activity(type=discord.ActivityType.listening, name=' your configuration')
+    await client.change_presence(status=discord.Status.idle, activity=activity)
     print('We have logged in as {0.user}'.format(client))
 
 
@@ -56,24 +60,22 @@ async def toggle(ctx: commands.Context):
                                 {'id': f'g{ctx.guild.id}',
                                  'toggle': not value['toggle']})
         else:
-            toggles.insert_one((value := {'id': f'g{ctx.guild.id}', 'toggle': False}))
+            toggles.insert_one(value := {'id': f'g{ctx.guild.id}', 'toggle': False})
         await ctx.message.add_reaction('✅')
         await RestrictedEmbed(ctx).send(
             'Toggle Succeeded',
-            'The bot will now {}follow custom commands.'.format(
-                '' if value['toggle'] else 'not '))
+            'The bot will now {}follow custom commands.'.format('' if value['toggle'] else 'not '))
     else:
         if (value := toggles.find_one({'id': f'u{ctx.author.id}'})) is not None:
             toggles.replace_one({'id': f'u{ctx.author.id}'},
                                 {'id': f'u{ctx.author.id}',
                                  'toggle': not value['toggle']})
         else:
-            toggles.insert_one((value := {'id': f'u{ctx.author.id}', 'toggle': False}))
+            toggles.insert_one(value := {'id': f'u{ctx.author.id}', 'toggle': False})
         await ctx.message.add_reaction('✅')
         await RestrictedEmbed(ctx).send(
             'Toggle Succeeded',
-            'The bot will now {}follow custom commands.'.format(
-                '' if value['toggle'] else 'not '))
+            'The bot will now {}follow custom commands.'.format('' if value['toggle'] else 'not '))
 
 
 if __name__ == '__main__':
