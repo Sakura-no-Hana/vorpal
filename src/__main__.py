@@ -1,10 +1,13 @@
 import os
+import shutil
 
 import discord
 from discord.ext import commands
+import lark
 import pymongo
 
 from utils.embed import RestrictedEmbed
+from utils.lang.lex import test_python_lib
 
 client = commands.Bot(command_prefix="|", help_command=None)
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
@@ -37,15 +40,24 @@ async def configure(ctx: commands.Context):
             "Please attach a Vorpal config file in order to configure the bot. "
             "See the documentation for more information.",
         )
-    # TODO: add in logic for detecting syntax errors
     if ctx.guild:
-        await ctx.message.attachments[0].save(f"../data/g{ctx.guild.id}.vorpal")
+        await ctx.message.attachments[0].save(path := f"../data/g{ctx.guild.id}.vorpal")
         if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
             toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
     else:
-        await ctx.message.attachments[0].save(f"../data/u{ctx.author.id}.vorpal")
+        await ctx.message.attachments[0].save(path := f"../data/u{ctx.author.id}.vorpal")
         if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
             toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
+    try:
+        test_python_lib(path)
+    except lark.exceptions.LarkError:
+        os.remove(path)
+        await ctx.message.add_reaction("💢")
+        return await RestrictedEmbed(ctx).send(
+            "Configuration Failed",
+            "The Vorpal config file was improperly formatted. "
+            "See the documentation for more information.",
+        )
 
     await ctx.message.add_reaction("✅")
     await RestrictedEmbed(ctx).send("Configuration Passed", "File saved.")
