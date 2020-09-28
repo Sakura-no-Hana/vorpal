@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "2d4131cdd802d11a41412874853def9472bf9e2083b5105f671dfe2c974c3029"
+            "sha256": "2d02a9cf0e619d4de94c1b0a44ab20820c47917e57661a9881d1193e2c8496e8"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -90,6 +90,17 @@
             ],
             "version": "==3.0.4"
         },
+        "deepdiff": {
+            "extras": [
+                "murmur"
+            ],
+            "hashes": [
+                "sha256:273b18d32bb9b956548290b2e3ddf79c515def2dd5738965f4348ae813e710c5",
+                "sha256:e2b74af4da0ef9cd338bb6e8c97242c1ec9d81fcb28298d7bb24acdc19ea79d7"
+            ],
+            "index": "pypi",
+            "version": "==5.0.2"
+        },
         "discord.py": {
             "extras": [
                 "voice"
@@ -116,6 +127,12 @@
             "index": "pypi",
             "version": "==0.9.0"
         },
+        "mmh3": {
+            "hashes": [
+                "sha256:185209a217c52afe43e079e5b232d0ef0f3a262601eaaf4371326ab6dcbec508"
+            ],
+            "version": "==2.5.1"
+        },
         "multidict": {
             "hashes": [
                 "sha256:1ece5a3369835c20ed57adadc663400b5525904e53bae59ec854a5d36b39b21a",
@@ -138,6 +155,13 @@
             ],
             "markers": "python_version >= '3.5'",
             "version": "==4.7.6"
+        },
+        "ordered-set": {
+            "hashes": [
+                "sha256:ba93b2df055bca202116ec44b9bead3df33ea63a7d5827ff8e16738b97f33a95"
+            ],
+            "markers": "python_version >= '3.5'",
+            "version": "==4.0.2"
         },
         "pycparser": {
             "hashes": [

@@ -2,6 +2,8 @@ import discord
 
 
 class RestrictedEmbed:
+    color = discord.Color(0x2F3136)
+
     def __init__(self, ctx):
         self.ctx = ctx
         self.fields = []
@@ -11,7 +13,7 @@ class RestrictedEmbed:
             if not self.ctx.channel.permissions_for(self.ctx.guild.me).embed_links:
                 return await self.ctx.send(f"**{title}**\n{description}")
         embed = discord.Embed(
-            title=title, color=self.ctx.guild.me.color, description=description
+            title=title, color=RestrictedEmbed.color, description=description
         )
         if self.ctx.guild:
             embed.set_author(name=self.ctx.guild.name, icon_url=self.ctx.guild.icon_url)

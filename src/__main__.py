@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 import os
-
+import zlib
 
 import discord
 from discord.ext import commands
@@ -8,12 +9,17 @@ import lark
 import pymongo
 
 from utils.embed import RestrictedEmbed
-from utils.lang.lex import test_python_lib
+from utils.lang.lex import parse
 
 client = commands.Bot(command_prefix="|", help_command=None)
+client._websocketbuffer = bytearray()
+client._zlib = zlib.decompressobj()
+client._tempid = ""
+client.botrole = dict()
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 mydb = myclient["vorpal"]
 toggles = mydb["toggles"]
+guilds = dict()
 
 
 @client.event
@@ -23,6 +29,59 @@ async def on_ready():
     )
     await client.change_presence(status=discord.Status.idle, activity=activity)
     print("We have logged in as {0.user}".format(client))
+
+
+@client.event
+async def on_socket_raw_receive(msg):
+    if type(msg) is bytes:
+        client._websocketbuffer.extend(msg)
+
+        if len(msg) >= 4:
+            if msg[-4:] == b"\x00\x00\xff\xff":
+                msg = client._zlib.decompress(client._websocketbuffer)
+                msg = msg.decode("utf-8")
+                client._websocketbuffer = bytearray()
+            else:
+                return
+        else:
+            return
+
+    msg = json.loads(msg)
+
+    if msg["t"] == "GUILD_CREATE":
+        for role in msg["d"]["roles"]:
+            if "tags" in role:
+                if "bot_id" in role["tags"]:
+                    if (
+                            role["tags"]["bot_id"] == client._tempid
+                    ):  # check if it's equal to the bot id
+                        client.botrole[msg["d"]["id"]] = role["id"]
+    elif msg["t"] == "READY":
+        client._tempid = msg["d"]["user"]["id"]
+    # print(msg)
+
+
+@client.event
+async def on_message(msg: discord.Message):
+    if not msg.guild:
+        return await client.process_commands(msg)
+    for role in msg.guild.me.roles:
+        if str(role.id) in client.botrole[str(msg.guild.id)]:
+            r = role
+            break
+
+    if r.color == discord.Color(0x2F3136):
+        return await client.process_commands(msg)
+
+    if msg.content[0] != "|":
+        return
+
+    await msg.add_reaction("💢")
+    await RestrictedEmbed(await client.get_context(msg)).send(
+        "Verification Failed",
+        "Please set the color of Vorpal's role, "
+        f"<@&{client.botrole[str(msg.guild.id)]}>, to #2f3136.",
+    )
 
 
 @client.command()
@@ -42,15 +101,20 @@ async def configure(ctx: commands.Context):
             "See the documentation for more information.",
         )
     if ctx.guild:
-        await ctx.message.attachments[0].save(path := Path(f"../data/u{ctx.author.id}.vorpal"))
+        await ctx.message.attachments[0].save(
+            path := Path(f"../data/u{ctx.author.id}.vorpal")
+        )
         if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
             toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
     else:
-        await ctx.message.attachments[0].save(path := Path(f"../data/u{ctx.author.id}.vorpal"))
+        await ctx.message.attachments[0].save(
+            path := Path(f"../data/u{ctx.author.id}.vorpal")
+        )
         if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
             toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
     try:
-        test_python_lib(path)
+        # TODO: actually save the tree in memory
+        parse(path)
     except lark.exceptions.LarkError:
         path.unlink()
         await ctx.message.add_reaction("💢")
