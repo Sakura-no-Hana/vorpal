@@ -11,7 +11,10 @@ class RestrictedEmbed:
     async def send(self, title: str = "Operation Succeeded", description: str = ""):
         if self.ctx.guild:
             if not self.ctx.channel.permissions_for(self.ctx.guild.me).embed_links:
-                return await self.ctx.send(f"**{title}**\n{description}")
+                msg = f"**{title}**\n{description}"
+                for field in self.fields:
+                    msg += f"\n\n`{field[0]}`\n{field[1]}"
+                return await self.ctx.send(msg)
         embed = discord.Embed(
             title=title, color=RestrictedEmbed.color, description=description
         )

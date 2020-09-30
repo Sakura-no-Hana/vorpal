@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
 import os
+import re
+import uuid
 import zlib
 
 import discord
 from discord.ext import commands
 import lark
 import pymongo
+import requests
 
 from utils.embed import RestrictedEmbed
 from utils.lang.lex import parse
@@ -14,12 +17,15 @@ from utils.lang.lex import parse
 client = commands.Bot(command_prefix="|", help_command=None)
 client._websocketbuffer = bytearray()
 client._zlib = zlib.decompressobj()
-client._tempid = ""
 client.botrole = dict()
+client.react = ("💯", "💢")
+client.reurl = re.compile(
+    r'(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))'
+)
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 mydb = myclient["vorpal"]
 toggles = mydb["toggles"]
-guilds = dict()
+loads = mydb["loads"]
 
 
 @client.event
@@ -32,7 +38,14 @@ async def on_ready():
 
 
 @client.event
+async def on_socket_raw_send(data):
+    # this is for debugging purposes
+    print(data)
+
+
+@client.event
 async def on_socket_raw_receive(msg):
+    # TODO: actually have events work with uploaded code
     if type(msg) is bytes:
         client._websocketbuffer.extend(msg)
 
@@ -49,22 +62,30 @@ async def on_socket_raw_receive(msg):
     msg = json.loads(msg)
 
     if msg["t"] == "GUILD_CREATE":
-        for role in msg["d"]["roles"]:
-            if "tags" in role:
-                if "bot_id" in role["tags"]:
-                    if (
-                            role["tags"]["bot_id"] == client._tempid
-                    ):  # check if it's equal to the bot id
-                        client.botrole[msg["d"]["id"]] = role["id"]
-    elif msg["t"] == "READY":
-        client._tempid = msg["d"]["user"]["id"]
+        # custom event used to find bot integration role since dpy doesn't support role tags
+        client.dispatch("guild_create", msg["d"])
     # print(msg)
+
+
+@client.event
+async def on_guild_create(msg: dict):
+    for role in msg["roles"]:
+        if "tags" in role:
+            if "bot_id" in role["tags"]:
+                if role["tags"]["bot_id"] == str(
+                        client.user.id
+                ):  # check if it's equal to the bot id
+                    client.botrole[msg["id"]] = role["id"]
+                    # print(msg["id"])
+                    print(msg["roles"])
+                    return
 
 
 @client.event
 async def on_message(msg: discord.Message):
     if not msg.guild:
         return await client.process_commands(msg)
+
     for role in msg.guild.me.roles:
         if str(role.id) in client.botrole[str(msg.guild.id)]:
             r = role
@@ -76,7 +97,7 @@ async def on_message(msg: discord.Message):
     if msg.content[0] != "|":
         return
 
-    await msg.add_reaction("💢")
+    await msg.add_reaction(client.react[1])
     await RestrictedEmbed(await client.get_context(msg)).send(
         "Verification Failed",
         "Please set the color of Vorpal's role, "
@@ -85,54 +106,99 @@ async def on_message(msg: discord.Message):
 
 
 @client.command()
-async def configure(ctx: commands.Context):
-    if ctx.guild:
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.message.add_reaction("💢")
-            return await RestrictedEmbed(ctx).send(
-                "Configuration Failed",
-                "Manage Guild permissions are required for configuration.",
-            )
+async def upload(ctx: commands.Context, msg: str = ""):
+    name = uuid.uuid4()
     if len(ctx.message.attachments) == 0:
-        await ctx.message.add_reaction("💢")
-        return await RestrictedEmbed(ctx).send(
-            "Configuration Failed",
-            "Please attach a Vorpal config file in order to configure the bot. "
-            "See the documentation for more information.",
-        )
-    if ctx.guild:
-        await ctx.message.attachments[0].save(
-            path := Path(f"../data/u{ctx.author.id}.vorpal")
-        )
-        if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
-            toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
+        url = client.reurl.search(msg)
+        if url:
+            f = requests.get(url.group(1), allow_redirects=True).content
+            with open(path := Path(f"../data/{name}.vorpal"), "wb+") as file:
+                file.write(f)
+            if ctx.guild:
+                if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
+                    toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
+            else:
+                if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
+                    toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
+            print(url.group(1))
+        else:
+            await ctx.message.add_reaction(client.react[1])
+            return await RestrictedEmbed(ctx).send(
+                "Upload Failed",
+                "Please attach a Vorpal config file in order to configure the bot. "
+                "See the documentation for more information.",
+            )
     else:
-        await ctx.message.attachments[0].save(
-            path := Path(f"../data/u{ctx.author.id}.vorpal")
-        )
-        if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
-            toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
+        await ctx.message.attachments[0].save(path := Path(f"../data/{name}.vorpal"))
+        if ctx.guild:
+            if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
+                toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
+        else:
+            if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
+                toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
     try:
-        # TODO: actually save the tree in memory
         parse(path)
     except lark.exceptions.LarkError:
         path.unlink()
-        await ctx.message.add_reaction("💢")
+        await ctx.message.add_reaction(client.react[1])
         return await RestrictedEmbed(ctx).send(
             "Configuration Failed",
             "The Vorpal config file was improperly formatted. "
             "See the documentation for more information.",
         )
 
-    await ctx.message.add_reaction("✅")
-    await RestrictedEmbed(ctx).send("Configuration Passed", "File saved.")
+    await ctx.message.add_reaction(client.react[0])
+    await RestrictedEmbed(ctx).send(
+        "Upload Passed",
+        f"File saved as `{name}`. Please record this ID. You must load this file in with `|load {name}` for it to work.",
+    )
+
+
+@client.command()
+async def load(ctx: commands.Context, name: str):
+    if ctx.guild:
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.message.add_reaction(client.react[1])
+            return await RestrictedEmbed(ctx).send(
+                "Loading Failed",
+                "Manage Guild permissions are required for configuration.",
+            )
+    # TODO: make all of this stuff work in mongo
+    if os.path.exists(Path(f"../data/{name}.vorpal")):
+        await ctx.message.add_reaction(client.react[0])
+        await RestrictedEmbed(ctx).send(
+            "Load Succeeded",
+            f"Module `{name}` loaded. To unload, please use `|unload {name}`.",
+        )
+    else:
+        await ctx.message.add_reaction(client.react[1])
+        await RestrictedEmbed(ctx).send(
+            "Load Failed",
+            f"Module `{name}` not found.",
+        )
+
+
+@client.command()
+async def unload(ctx: commands.Context, name: str):
+    if ctx.guild:
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.message.add_reaction(client.react[1])
+            return await RestrictedEmbed(ctx).send(
+                "Unloading Failed",
+                "Manage Guild permissions are required for configuration.",
+            )
+    await ctx.message.add_reaction(client.react[0])
+    await RestrictedEmbed(ctx).send(
+        "Unload Succeeded",
+        f"Module `{name}` unloaded. To unload, please use `|load {name}`.",
+    )
 
 
 @client.command()
 async def toggle(ctx: commands.Context):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.message.add_reaction("💢")
+            await ctx.message.add_reaction(client.react[1])
             return await RestrictedEmbed(ctx).send(
                 "Toggle Failed", "Manage Guild permissions are required to toggle."
             )
@@ -143,7 +209,7 @@ async def toggle(ctx: commands.Context):
             )
         else:
             toggles.insert_one(value := {"id": f"g{ctx.guild.id}", "toggle": False})
-        await ctx.message.add_reaction("✅")
+        await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
@@ -158,7 +224,7 @@ async def toggle(ctx: commands.Context):
             )
         else:
             toggles.insert_one(value := {"id": f"u{ctx.author.id}", "toggle": False})
-        await ctx.message.add_reaction("✅")
+        await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
