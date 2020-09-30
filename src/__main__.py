@@ -1,3 +1,4 @@
+import datetime
 import json
 from pathlib import Path
 import os
@@ -7,6 +8,7 @@ import zlib
 
 import discord
 from discord.ext import commands
+import humanize
 import lark
 import pymongo
 import requests
@@ -106,12 +108,22 @@ async def on_message(msg: discord.Message):
 
 
 @client.command()
+@commands.cooldown(5, 86400, commands.BucketType.user)
 async def upload(ctx: commands.Context, msg: str = ""):
     name = uuid.uuid4()
     if len(ctx.message.attachments) == 0:
         url = client.reurl.search(msg)
         if url:
-            f = requests.get(url.group(1), allow_redirects=True).content
+            f = requests.get(url.group(1), allow_redirects=True)
+            length = f.headers.get('content-length', None)
+            if length and length > 5e7:
+                await ctx.message.add_reaction(client.react[1])
+                return await RestrictedEmbed(ctx).send(
+                    "Upload Failed",
+                    "The file retrieved from that URL is too large. "
+                    "The largest allowable file size from a URL is 50 megabytes.",
+                )
+            f = f.content
             with open(path := Path(f"../data/{name}.vorpal"), "wb+") as file:
                 file.write(f)
             if ctx.guild:
@@ -152,6 +164,18 @@ async def upload(ctx: commands.Context, msg: str = ""):
         "Upload Passed",
         f"File saved as `{name}`. Please record this ID. You must load this file in with `|load {name}` for it to work.",
     )
+
+
+@upload.error
+async def upload_error(ctx: commands.Context, error):
+    if isinstance(error, commands.errors.CommandOnCooldown):
+        retry = humanize.naturaldelta(datetime.timedelta(seconds=error.retry_after))
+        await ctx.message.add_reaction(client.react[1])
+        await RestrictedEmbed(ctx).send(
+            "Upload Failed",
+            "You have invoked the upload command too many times in a relatively short period of time. "
+            f"The limit is 5 uploads per day. Please try again in {retry}."
+        )
 
 
 @client.command()
