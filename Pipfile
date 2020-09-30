@@ -10,6 +10,9 @@ verify_ssl = true
 lark-parser = "*"
 PyNaCl = "==1.3.0"
 pymongo = "*"
+deepdiff = { extras = ["murmur"], version = "*" }
+requests = "*"
+humanize = "*"
 
 [requires]
 python_version = "3.8"
