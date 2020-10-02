@@ -19,8 +19,12 @@ client = commands.Bot(command_prefix="|", help_command=None)
 client.botrole = dict()
 client.raw = Decoder()
 client.react = ("💯", "💢")
-client.toggles = SqliteDict(filename=Path("../data/toggle.db"), autocommit=True)
-client.loads = SqliteDict(filename=Path("../data/load.db"), autocommit=True)
+client.toggles = SqliteDict(
+    filename=Path("../data/vorpal.db"), tablename="toggle", autocommit=True
+)
+client.loads = SqliteDict(
+    filename=Path("../data/vorpal.db"), tablename="load", autocommit=True
+)
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 mydb = myclient["vorpal"]
 toggles = mydb["toggles"]
