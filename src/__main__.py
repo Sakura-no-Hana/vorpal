@@ -1,16 +1,14 @@
 import datetime
-import json
 from pathlib import Path
 import os
-import re
 import uuid
-import zlib
 
 import discord
 from discord.ext import commands
 import humanize
 import lark
 import pymongo
+from sqlitedict import SqliteDict
 
 from utils.embed import RestrictedEmbed
 from utils.lang.lex import parse
@@ -18,9 +16,11 @@ from utils.code import CodeConverter, LinkedFileTooLarge, CodeNotFound
 from utils.socket import Decoder
 
 client = commands.Bot(command_prefix="|", help_command=None)
-client._websocketbuffer = bytearray()
+client.botrole = dict()
 client.raw = Decoder()
 client.react = ("💯", "💢")
+client.toggles = SqliteDict(filename=Path("../data/toggle.db"), autocommit=True)
+client.loads = SqliteDict(filename=Path("../data/load.db"), autocommit=True)
 myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 mydb = myclient["vorpal"]
 toggles = mydb["toggles"]
@@ -70,7 +70,16 @@ async def on_guild_create(msg: dict):
 @client.event
 async def on_message(msg: discord.Message):
     if not msg.guild:
+        if f"u{msg.author.id}" not in client.toggles:
+            client.toggles[f"u{msg.author.id}"] = True
+        if f"u{msg.author.id}" not in client.loads:
+            client.loads[f"u{msg.author.id}"] = set()
         return await client.process_commands(msg)
+
+    if f"g{msg.guild.id}" not in client.toggles:
+        client.toggles[f"g{msg.guild.id}"] = True
+    if f"g{msg.guild.id}" not in client.loads:
+        client.loads[f"g{msg.guild.id}"] = set()
 
     for role in msg.guild.me.roles:
         if str(role.id) in client.botrole[str(msg.guild.id)]:
@@ -99,12 +108,6 @@ async def upload(ctx: commands.Context, *, msg: CodeConverter = None):
         msg = await CodeConverter.convert(ctx, "")
     with open(path := Path(f"../data/{name}.vorpal"), "w+") as file:
         file.write(msg)
-    if ctx.guild:
-        if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
-            toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
-    else:
-        if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
-            toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
 
     try:
         parse(path)
@@ -161,8 +164,11 @@ async def load(ctx: commands.Context, name: str):
                 "Loading Failed",
                 "Manage Guild permissions are required for configuration.",
             )
-    # TODO: make all of this stuff work in mongo
     if os.path.exists(Path(f"../data/{name}.vorpal")):
+        if ctx.guild:
+            client.loads[f"g{ctx.guild.id}"].add(name)
+        else:
+            client.loads[f"u{ctx.author.id}"].add(name)
         await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Load Succeeded",
@@ -185,6 +191,13 @@ async def unload(ctx: commands.Context, name: str):
                 "Unloading Failed",
                 "Manage Guild permissions are required for configuration.",
             )
+    try:
+        if ctx.guild:
+            client.loads[f"g{ctx.guild.id}"].remove(name)
+        else:
+            client.loads[f"u{ctx.author.id}"].remove(name)
+    except ValueError:
+        pass
     await ctx.message.add_reaction(client.react[0])
     await RestrictedEmbed(ctx).send(
         "Unload Succeeded",
@@ -200,50 +213,41 @@ async def toggle(ctx: commands.Context):
             return await RestrictedEmbed(ctx).send(
                 "Toggle Failed", "Manage Guild permissions are required to toggle."
             )
-        if (value := toggles.find_one({"id": f"g{ctx.guild.id}"})) is not None:
-            toggles.replace_one(
-                {"id": f"g{ctx.guild.id}"},
-                {"id": f"g{ctx.guild.id}", "toggle": not value["toggle"]},
-            )
-        else:
-            toggles.insert_one(value := {"id": f"g{ctx.guild.id}", "toggle": False})
+
+        client.toggles[f"g{ctx.guild.id}"] = not client.toggles[f"g{ctx.guild.id}"]
+
         await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
-                "" if value["toggle"] else "not "
+                "" if client.toggles[f"g{ctx.guild.id}"] else "not "
             ),
         )
     else:
-        if (value := toggles.find_one({"id": f"u{ctx.author.id}"})) is not None:
-            toggles.replace_one(
-                {"id": f"u{ctx.author.id}"},
-                {"id": f"u{ctx.author.id}", "toggle": not value["toggle"]},
-            )
-        else:
-            toggles.insert_one(value := {"id": f"u{ctx.author.id}", "toggle": False})
+        client.toggles[f"u{ctx.author.id}"] = not client.toggles[f"u{ctx.author.id}"]
+
         await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
-                "" if value["toggle"] else "not "
+                "" if client.toggles[f"u{ctx.author.id}"] else "not "
             ),
         )
 
 
-@client.command()
-async def help(ctx: commands.Context):
-    await RestrictedEmbed(ctx).field(
-        "|configure [config:file]",
-        "Configure the bot using the attached file, `config`. By default, this is restricted to those with the Manage Guild permission. See file syntax in the bot's documentation.",
-    ).field(
-        "|toggle",
-        "Toggle whether the bot uses the config file. This is so reckless users have a killswitch.",
-    ).field(
-        "|help", "Shows this command."
-    ).send(
-        "Help", "|command name [var name:var type] <optional var name:var type>"
-    )
+# @client.command()
+# async def help(ctx: commands.Context):
+#     await RestrictedEmbed(ctx).field(
+#         "|configure [config:file]",
+#         "Configure the bot using the attached file, `config`. By default, this is restricted to those with the Manage Guild permission. See file syntax in the bot's documentation.",
+#     ).field(
+#         "|toggle",
+#         "Toggle whether the bot uses the config file. This is so reckless users have a killswitch.",
+#     ).field(
+#         "|help", "Shows this command."
+#     ).send(
+#         "Help", "|command name [var name:var type] <optional var name:var type>"
+#     )
 
 
 if __name__ == "__main__":

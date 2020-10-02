@@ -13,6 +13,7 @@ pymongo = "*"
 deepdiff = { extras = ["murmur"], version = "*" }
 requests = "*"
 humanize = "*"
+sqlitedict = "*"
 
 [requires]
 python_version = "3.8"
