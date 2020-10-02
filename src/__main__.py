@@ -47,9 +47,10 @@ async def on_socket_raw_receive(msg):
     # TODO: actually have events work with uploaded code
     msg = client.raw.decode(msg)
 
-    if msg["t"] == "GUILD_CREATE":
-        # custom event used to find bot integration role since dpy doesn't support role tags
-        client.dispatch("guild_create", msg["d"])
+    if "t" in msg:
+        if msg["t"] == "GUILD_CREATE":
+            # custom event used to find bot integration role since dpy doesn't support role tags
+            client.dispatch("guild_create", msg["d"])
 
 
 @client.event
