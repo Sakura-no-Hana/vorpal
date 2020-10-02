@@ -9,8 +9,6 @@ verify_ssl = true
 "discord.py" = { extras = ["voice"], version = "*" }
 lark-parser = "*"
 PyNaCl = "==1.3.0"
-pymongo = "*"
-deepdiff = { extras = ["murmur"], version = "*" }
 requests = "*"
 humanize = "*"
 sqlitedict = "*"

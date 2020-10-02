@@ -7,7 +7,6 @@ import discord
 from discord.ext import commands
 import humanize
 import lark
-import pymongo
 from sqlitedict import SqliteDict
 
 from utils.embed import RestrictedEmbed
@@ -25,10 +24,6 @@ client.toggles = SqliteDict(
 client.loads = SqliteDict(
     filename=Path("../data/vorpal.db"), tablename="load", autocommit=True
 )
-myclient = pymongo.MongoClient("mongodb://localhost:27017/")
-mydb = myclient["vorpal"]
-toggles = mydb["toggles"]
-loads = mydb["loads"]
 
 
 @client.event
@@ -63,7 +58,7 @@ async def on_guild_create(msg: dict):
         if "tags" in role:
             if "bot_id" in role["tags"]:
                 if role["tags"]["bot_id"] == str(
-                        client.user.id
+                    client.user.id
                 ):  # check if it's equal to the bot id
                     client.botrole[msg["id"]] = role["id"]
                     # print(msg["id"])
