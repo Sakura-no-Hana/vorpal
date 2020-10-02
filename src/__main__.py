@@ -15,6 +15,7 @@ import requests
 
 from utils.embed import RestrictedEmbed
 from utils.lang.lex import parse
+from utils.code import CodeConverter, LinkedFileTooLarge, CodeNotFound
 
 client = commands.Bot(command_prefix="|", help_command=None)
 client._websocketbuffer = bytearray()
@@ -109,45 +110,19 @@ async def on_message(msg: discord.Message):
 
 @client.command()
 @commands.cooldown(5, 86400, commands.BucketType.user)
-async def upload(ctx: commands.Context, msg: str = ""):
+async def upload(ctx: commands.Context, *, msg: CodeConverter = None):
     name = uuid.uuid4()
-    if len(ctx.message.attachments) == 0:
-        url = client.reurl.search(msg)
-        if url:
-            f = requests.get(url.group(1), allow_redirects=True)
-            length = f.headers.get('content-length', None)
-            if length and length > 5e7:
-                await ctx.message.add_reaction(client.react[1])
-                return await RestrictedEmbed(ctx).send(
-                    "Upload Failed",
-                    "The file retrieved from that URL is too large. "
-                    "The largest allowable file size from a URL is 50 megabytes.",
-                )
-            f = f.content
-            with open(path := Path(f"../data/{name}.vorpal"), "wb+") as file:
-                file.write(f)
-            if ctx.guild:
-                if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
-                    toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
-            else:
-                if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
-                    toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
-            print(url.group(1))
-        else:
-            await ctx.message.add_reaction(client.react[1])
-            return await RestrictedEmbed(ctx).send(
-                "Upload Failed",
-                "Please attach a Vorpal config file in order to configure the bot. "
-                "See the documentation for more information.",
-            )
+    if not msg:
+        msg = await CodeConverter.convert(ctx, "")
+    with open(path := Path(f"../data/{name}.vorpal"), "w+") as file:
+        file.write(msg)
+    if ctx.guild:
+        if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
+            toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
     else:
-        await ctx.message.attachments[0].save(path := Path(f"../data/{name}.vorpal"))
-        if ctx.guild:
-            if toggles.find_one({"id": f"g{ctx.guild.id}"}) is not None:
-                toggles.insert_one({"id": f"g{ctx.guild.id}", "toggle": True})
-        else:
-            if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
-                toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
+        if toggles.find_one({"id": f"u{ctx.author.id}"}) is not None:
+            toggles.insert_one({"id": f"u{ctx.author.id}", "toggle": True})
+
     try:
         parse(path)
     except lark.exceptions.LarkError:
@@ -162,7 +137,7 @@ async def upload(ctx: commands.Context, msg: str = ""):
     await ctx.message.add_reaction(client.react[0])
     await RestrictedEmbed(ctx).send(
         "Upload Passed",
-        f"File saved as `{name}`. Please record this ID. You must load this file in with `|load {name}` for it to work.",
+        f"File saved as `{name}`. Please record this ID. You must load this file in with ```|load {name}``` for it to work.",
     )
 
 
@@ -174,8 +149,24 @@ async def upload_error(ctx: commands.Context, error):
         await RestrictedEmbed(ctx).send(
             "Upload Failed",
             "You have invoked the upload command too many times in a relatively short period of time. "
-            f"The limit is 5 uploads per day. Please try again in {retry}."
+            f"The limit is 5 uploads per day. Please try again in {retry}.",
         )
+    elif isinstance(error, LinkedFileTooLarge):
+        await ctx.message.add_reaction(client.react[1])
+        await RestrictedEmbed(ctx).send(
+            "Upload Failed",
+            "The file retrieved from that URL is too large. "
+            "The largest allowable file size from a URL is 50 megabytes.",
+        )
+    elif isinstance(error, CodeNotFound):
+        await ctx.message.add_reaction(client.react[1])
+        await RestrictedEmbed(ctx).send(
+            "Upload Failed",
+            "Your message contained no code to upload. "
+            "Please either upload a file, use a URL, or put your code in code blocks.",
+        )
+    else:
+        raise error
 
 
 @client.command()
@@ -192,7 +183,7 @@ async def load(ctx: commands.Context, name: str):
         await ctx.message.add_reaction(client.react[0])
         await RestrictedEmbed(ctx).send(
             "Load Succeeded",
-            f"Module `{name}` loaded. To unload, please use `|unload {name}`.",
+            f"Module `{name}` loaded. To unload, please use:```|unload {name}```",
         )
     else:
         await ctx.message.add_reaction(client.react[1])
@@ -214,7 +205,7 @@ async def unload(ctx: commands.Context, name: str):
     await ctx.message.add_reaction(client.react[0])
     await RestrictedEmbed(ctx).send(
         "Unload Succeeded",
-        f"Module `{name}` unloaded. To unload, please use `|load {name}`.",
+        f"Module `{name}` unloaded. To unload, please use:```|load {name}```",
     )
 
 
