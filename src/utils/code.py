@@ -5,11 +5,17 @@ import requests
 
 
 class LinkedFileTooLarge(commands.UserInputError):
+    def __init__(self, ctx, size):
+        self.ctx = ctx
+        self.size = size
+
+
+class CodeNotFound(commands.UserInputError):
     def __init__(self, ctx):
         self.ctx = ctx
 
 
-class CodeNotFound(commands.UserInputError):
+class InvalidFormat(commands.UserInputError):
     def __init__(self, ctx):
         self.ctx = ctx
 
@@ -22,22 +28,32 @@ class CodeConverter(commands.Converter):
 
     @classmethod
     async def convert(cls, ctx, argument):
+        # i should really store these constants somewhere lol
+        upload_limit = ctx.bot.settings["upload"]["size"]
         if len(ctx.message.attachments) == 0:
-            if results := CodeConverter.reurl.search(argument):
-                url = results.group(0)
-                f = requests.get(url, allow_redirects=True)
-                length = f.headers.get("content-length", None)
-                if length and length > 5e7:
-                    raise LinkedFileTooLarge(ctx)
-                return f.content.decode("utf-8")
-            elif results := CodeConverter.recodeblock.search(argument):
+            if results := CodeConverter.recodeblock.search(argument):
                 block = results.group(0)
                 if re.compile(r"```\S*?\n").match(block):
                     print("hmm")
                     return "\n".join(block.split("\n")[1:])[:-3]
                 return block[3:-3]
+            elif results := CodeConverter.reurl.search(argument):
+                url = results.group(0)
+                f = requests.get(url, allow_redirects=True)
+                length = f.headers.get("content-length", None)
+                if length and length > upload_limit:
+                    raise LinkedFileTooLarge(ctx, upload_limit)
+                try:
+                    return f.content.decode("utf-8")
+                except UnicodeDecodeError:
+                    raise InvalidFormat(ctx)
             else:
                 raise CodeNotFound(ctx)
         else:
-            code = await ctx.message.attachments[0].read()
-            return code.decode("utf-8")
+            if (f := ctx.message.attachments[0]).size > upload_limit:
+                raise LinkedFileTooLarge(ctx, upload_limit)
+            code = await f.read()
+            try:
+                return code.decode("utf-8")
+            except UnicodeDecodeError:
+                raise InvalidFormat(ctx)

@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from pathlib import Path
 import os
@@ -8,16 +9,24 @@ from discord.ext import commands
 import humanize
 import lark
 from sqlitedict import SqliteDict
+import yaml
 
 from utils.embed import RestrictedEmbed
 from utils.lang.lex import parse
-from utils.code import CodeConverter, LinkedFileTooLarge, CodeNotFound
+from utils.code import CodeConverter, LinkedFileTooLarge, CodeNotFound, InvalidFormat
 from utils.socket import Decoder
 
-client = commands.Bot(command_prefix="|", help_command=None)
+with open(Path("../config.yaml")) as config:
+    _ = yaml.safe_load(config)
+    client = commands.Bot(command_prefix=_["prefix"], help_command=None)
+    client.settings = _
+
 client.botrole = dict()
 client.raw = Decoder()
-client.react = ("💯", "💢")
+client.react = client.settings["react"]
+client.command_prefix = client.settings["prefix"]
+
+# TODO: give each server a table, each with toggle, load, and privacy settings?
 client.toggles = SqliteDict(
     filename=Path("../data/vorpal.db"), tablename="toggle", autocommit=True
 )
@@ -80,6 +89,19 @@ async def on_message(msg: discord.Message):
     if f"g{msg.guild.id}" not in client.loads:
         client.loads[f"g{msg.guild.id}"] = set()
 
+    if str(msg.guild.id) not in client.botrole:
+        if msg.guild.owner == msg.guild.me:
+            return await client.process_commands(msg)
+        await RestrictedEmbed(await client.get_context(msg)).send(
+            "Verification Failed",
+            "Please check off the permission boxes in Vorpal's official invite link. "
+            "While Vorpal does function with no unintended behaviors without permissions, "
+            "it does severely limit its capabilities, which defeats the purpose of the bot.\n\n"
+            "Vorpal will leave the server shortly; please reinvite the bot with permissions if needed.",
+        )
+        await asyncio.sleep(1)
+        return await msg.guild.leave()
+
     for role in msg.guild.me.roles:
         if str(role.id) in client.botrole[str(msg.guild.id)]:
             r = role
@@ -91,7 +113,7 @@ async def on_message(msg: discord.Message):
     if msg.content[0] != "|":
         return
 
-    await msg.add_reaction(client.react[1])
+    await msg.add_reaction(client.react["fail"])
     await RestrictedEmbed(await client.get_context(msg)).send(
         "Verification Failed",
         "Please set the color of Vorpal's role, "
@@ -100,7 +122,7 @@ async def on_message(msg: discord.Message):
 
 
 @client.command()
-@commands.cooldown(5, 86400, commands.BucketType.user)
+@commands.cooldown(client.settings["upload"]["freq"], 86400, commands.BucketType.user)
 async def upload(ctx: commands.Context, *, msg: CodeConverter = None):
     name = uuid.uuid4()
     if not msg:
@@ -109,17 +131,18 @@ async def upload(ctx: commands.Context, *, msg: CodeConverter = None):
         file.write(msg)
 
     try:
-        parse(path)
+        print(parse(path).pretty())
     except lark.exceptions.LarkError:
         path.unlink()
-        await ctx.message.add_reaction(client.react[1])
+        raise
+        await ctx.message.add_reaction(client.react["fail"])
         return await RestrictedEmbed(ctx).send(
             "Configuration Failed",
             "The Vorpal config file was improperly formatted. "
             "See the documentation for more information.",
         )
 
-    await ctx.message.add_reaction(client.react[0])
+    await ctx.message.add_reaction(client.react["pass"])
     await RestrictedEmbed(ctx).send(
         "Upload Passed",
         f"File saved as `{name}`. Please record this ID. You must load this file in with ```|load {name}``` for it to work.",
@@ -130,35 +153,55 @@ async def upload(ctx: commands.Context, *, msg: CodeConverter = None):
 async def upload_error(ctx: commands.Context, error):
     if isinstance(error, commands.errors.CommandOnCooldown):
         retry = humanize.naturaldelta(datetime.timedelta(seconds=error.retry_after))
-        await ctx.message.add_reaction(client.react[1])
+        await ctx.message.add_reaction(client.react["fail"])
         await RestrictedEmbed(ctx).send(
             "Upload Failed",
             "You have invoked the upload command too many times in a relatively short period of time. "
             f"The limit is 5 uploads per day. Please try again in {retry}.",
         )
     elif isinstance(error, LinkedFileTooLarge):
-        await ctx.message.add_reaction(client.react[1])
+        await ctx.message.add_reaction(client.react["fail"])
         await RestrictedEmbed(ctx).send(
             "Upload Failed",
-            "The file retrieved from that URL is too large. "
-            "The largest allowable file size from a URL is 50 megabytes.",
+            "The file retrieved is too large. "
+            f"The largest allowable file size is {humanize.naturalsize(error.size)}.",
         )
     elif isinstance(error, CodeNotFound):
-        await ctx.message.add_reaction(client.react[1])
+        await ctx.message.add_reaction(client.react["fail"])
         await RestrictedEmbed(ctx).send(
             "Upload Failed",
             "Your message contained no code to upload. "
             "Please either upload a file, use a URL, or put your code in code blocks.",
+        )
+    elif isinstance(error, CodeNotFound):
+        await ctx.message.add_reaction(client.react["fail"])
+        await RestrictedEmbed(ctx).send(
+            "Upload Failed",
+            "Your message was wrongly encoded. "
+            "Files or URLs must contain UTF-8 encoded text for the upload to succeed.",
         )
     else:
         raise error
 
 
 @client.command()
+async def download(ctx: commands.Context, name: str):
+    if os.path.exists(path := Path(f"../data/{name}.vorpal")):
+        await ctx.message.add_reaction(client.react["pass"])
+        await ctx.send(file=discord.File(fp=path, filename=name))
+    else:
+        await ctx.message.add_reaction(client.react["fail"])
+        await RestrictedEmbed(ctx).send(
+            "Download Failed",
+            f"Module `{name}` not found.",
+        )
+
+
+@client.command()
 async def load(ctx: commands.Context, name: str):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.message.add_reaction(client.react[1])
+            await ctx.message.add_reaction(client.react["fail"])
             return await RestrictedEmbed(ctx).send(
                 "Loading Failed",
                 "Manage Guild permissions are required for configuration.",
@@ -168,13 +211,13 @@ async def load(ctx: commands.Context, name: str):
             client.loads[f"g{ctx.guild.id}"].add(name)
         else:
             client.loads[f"u{ctx.author.id}"].add(name)
-        await ctx.message.add_reaction(client.react[0])
+        await ctx.message.add_reaction(client.react["pass"])
         await RestrictedEmbed(ctx).send(
             "Load Succeeded",
             f"Module `{name}` loaded. To unload, please use:```|unload {name}```",
         )
     else:
-        await ctx.message.add_reaction(client.react[1])
+        await ctx.message.add_reaction(client.react["fail"])
         await RestrictedEmbed(ctx).send(
             "Load Failed",
             f"Module `{name}` not found.",
@@ -185,7 +228,7 @@ async def load(ctx: commands.Context, name: str):
 async def unload(ctx: commands.Context, name: str):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.message.add_reaction(client.react[1])
+            await ctx.message.add_reaction(client.react["fail"])
             return await RestrictedEmbed(ctx).send(
                 "Unloading Failed",
                 "Manage Guild permissions are required for configuration.",
@@ -197,7 +240,7 @@ async def unload(ctx: commands.Context, name: str):
             client.loads[f"u{ctx.author.id}"].remove(name)
     except ValueError:
         pass
-    await ctx.message.add_reaction(client.react[0])
+    await ctx.message.add_reaction(client.react["pass"])
     await RestrictedEmbed(ctx).send(
         "Unload Succeeded",
         f"Module `{name}` unloaded. To unload, please use:```|load {name}```",
@@ -208,14 +251,14 @@ async def unload(ctx: commands.Context, name: str):
 async def toggle(ctx: commands.Context):
     if ctx.guild:
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.message.add_reaction(client.react[1])
+            await ctx.message.add_reaction(client.react["fail"])
             return await RestrictedEmbed(ctx).send(
                 "Toggle Failed", "Manage Guild permissions are required to toggle."
             )
 
         client.toggles[f"g{ctx.guild.id}"] = not client.toggles[f"g{ctx.guild.id}"]
 
-        await ctx.message.add_reaction(client.react[0])
+        await ctx.message.add_reaction(client.react["pass"])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
@@ -225,7 +268,7 @@ async def toggle(ctx: commands.Context):
     else:
         client.toggles[f"u{ctx.author.id}"] = not client.toggles[f"u{ctx.author.id}"]
 
-        await ctx.message.add_reaction(client.react[0])
+        await ctx.message.add_reaction(client.react["pass"])
         await RestrictedEmbed(ctx).send(
             "Toggle Succeeded",
             "The bot will now {}follow custom commands.".format(
@@ -250,5 +293,5 @@ async def toggle(ctx: commands.Context):
 
 
 if __name__ == "__main__":
-    token = os.environ.get("TOKEN")
-    client.run(token)
+    # token = os.environ.get("TOKEN")
+    client.run(client.settings["token"])

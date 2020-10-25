@@ -1,0 +1,9 @@
+token: NzQ0NjYyNjc5Nzc1NDc3ODYw.XzmfKg.6hQKkr0HLOaeRqb2kDgC58_heBY
+react:
+  pass: "💯"
+  fail: "💢"
+upload:
+  size: 8388608
+  freq: 5
+# prefix is not configurable by command (yet) since the user has full control of actions, including making commands with whatever prefix
+prefix: "|"

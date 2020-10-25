@@ -6,9 +6,9 @@ start: (_NEWLINE | stmt)*
 
 decorator: "@" NAME [ "(" [arguments] ")" ] _NEWLINE
 decorators: decorator+
-decorated: decorators (expr_stmt)
+decorated: decorators (expr_stmt | funcdef)
 
-funcdef: "def" NAME "(" parameters? ")" ["->" test] ":" suite
+funcdef: "def" NAME "(" parameters? ")" ":" suite
 
 parameters: paramvalue ("," paramvalue)*
 
@@ -19,7 +19,7 @@ parameters: paramvalue ("," paramvalue)*
 ?small_stmt: (expr_stmt | pass_stmt | flow_stmt | global_stmt | nonlocal_stmt)
 ?expr_stmt: testlist_star_expr (augassign (testlist)
          | ("=" (testlist_star_expr))*)
-?testlist_star_expr: (test|star_expr) ("," (test|star_expr))* [","]
+?testlist_star_expr: (test) ("," (test))* [","]
 !augassign: ("+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" | "**=" | "//=")
 // For normal and annotated assignments, additional restrictions enforced by the interpreter
 pass_stmt: "pass"
@@ -32,7 +32,7 @@ return_stmt: "return" [testlist]
 global_stmt: "global" NAME ("," NAME)*
 nonlocal_stmt: "nonlocal" NAME ("," NAME)*
 
-compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | classdef | decorated
+compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | decorated
 if_stmt: "if" test ":" suite ("elif" test ":" suite)* ["else" ":" suite]
 while_stmt: "while" test ":" suite ["else" ":" suite]
 for_stmt: "for" exprlist "in" testlist ":" suite
@@ -44,7 +44,6 @@ suite: simple_stmt | _NEWLINE _INDENT stmt+ _DEDENT
 ?not_test: "not" not_test -> not
          | comparison
 ?comparison: expr (_comp_op expr)*
-star_expr: "*" expr
 ?expr: xor_expr ("|" xor_expr)*
 ?xor_expr: and_expr ("^" and_expr)*
 ?and_expr: shift_expr ("&" shift_expr)*
@@ -79,15 +78,13 @@ star_expr: "*" expr
      | "true"    -> const_true
      | "false"   -> const_false
 
-?testlist_comp: (test|star_expr) [("," (test|star_expr))+ [","] | ","]
+?testlist_comp: (test) [("," (test))+ [","] | ","]
 subscriptlist: subscript ("," subscript)* [","]
 subscript: test | [test] ":" [test] [sliceop]
 sliceop: ":" [test]
-exprlist: (expr|star_expr) ("," (expr|star_expr))* [","]
+exprlist: (expr) ("," (expr))* [","]
 testlist: test ("," test)* [","]
-dictorsetmaker: ( ((test ":" test | "**" expr) (("," (test ":" test | "**" expr))* [","])) | ((test | star_expr) (("," (test | star_expr))* [","])) )
-
-classdef: "class" NAME ["(" [arguments] ")"] ":" suite
+dictorsetmaker: ((test ":" test) (("," (test ":" test))* [","]))
 
 arguments: argvalue ("," argvalue)*
 
@@ -98,7 +95,7 @@ arguments: argvalue ("," argvalue)*
 // not used in grammar, but may appear in "node" passed from Parser to Compiler
 encoding_decl: NAME
 
-number: DEC_NUMBER | HEX_NUMBER | BIN_NUMBER | OCT_NUMBER | FLOAT_NUMBER | IMAG_NUMBER
+number: DEC_NUMBER
 string: STRING
 // Tokens
 
@@ -110,11 +107,6 @@ _NEWLINE: ( /\r?\n[\t ]*/ | COMMENT )+
 STRING : /[ubf]?r?("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
 
 DEC_NUMBER: /0|[1-9]\d*/i
-HEX_NUMBER.2: /0x[\da-f]*/i
-OCT_NUMBER.2: /0o[0-7]*/i
-BIN_NUMBER.2 : /0b[0-1]*/i
-FLOAT_NUMBER.2: /((\d+\.\d*|\.\d+)(e[-+]?\d+)?|\d+(e[-+]?\d+))/i
-IMAG_NUMBER.2: /\d+j/i | FLOAT_NUMBER "j"i
 
 %ignore /[\t \f]+/  // WS
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT

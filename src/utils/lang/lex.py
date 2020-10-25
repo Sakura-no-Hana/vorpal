@@ -1,5 +1,4 @@
 from io import open
-import time
 from modulefinder import ModuleFinder
 
 from lark import Lark
@@ -31,6 +30,8 @@ def parse(path: str):
 
 
 if __name__ == "__main__":
+    print(parse("test.py"))
+
     finder = ModuleFinder()
     finder.run_script("test.py")
 
